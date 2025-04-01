@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Previsualización del Contrato</title>
+    <style>
+        body,
+        html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            position: relative;
+        }
+
+        iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+
+        .boton-firmar {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: #28a745;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 16px;
+            cursor: pointer;
+            border-radius: 5px;
+            box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .boton-firmar:hover {
+            background-color: #218838;
+        }
+
+        /* Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal-contenido {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            position: relative;
+        }
+
+        canvas {
+            border: 1px solid black;
+            background: #f8f8f8;
+        }
+
+        .modal-botones {
+            margin-top: 10px;
+        }
+
+        .modal-botones button {
+            margin: 5px;
+            padding: 10px 15px;
+            cursor: pointer;
+            border: none;
+            border-radius: 5px;
+        }
+
+        .guardar-firma {
+            background-color: #007bff;
+            color: white;
+        }
+
+        .limpiar-firma {
+            background-color: #dc3545;
+            color: white;
+        }
+
+        .cerrar-modal {
+            background-color: gray;
+            color: white;
+        }
+    </style>
+</head>
+
+<body>
+    <iframe id="pdfViewer" src="" frameborder="0"></iframe>
+    <button class="boton-firmar" id="firmarBtn">Firmar Documento</button>
+
+    <!-- Modal de Firma -->
+    <div class="modal" id="modalFirma">
+        <div class="modal-contenido">
+            <h2>Firme aquí</h2>
+            <canvas id="canvasFirma" width="400" height="200"></canvas>
+            <div class="modal-botones">
+                <button class="guardar-firma" id="guardarFirma">Guardar Firma y Descargar</button>
+                <button class="limpiar-firma" id="limpiarFirma">Limpiar</button>
+                <button class="cerrar-modal" id="cerrarModal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.10.377/pdf.min.js"></script>
+    <script>
+        // Obtener la URL del PDF desde los parámetros
+        const urlParams = new URLSearchParams(window.location.search);
+        const pdfURL = urlParams.get("pdf");
+        const idContrato = urlParams.get("id");  // Asegúrate de que 'id' esté en la URL
+        // Verificar si hay una URL de PDF y asignarla al iframe
+        if (pdfURL) {
+            document.getElementById("pdfViewer").src = pdfURL;
+            console.log(idContrato)
+        } else {
+            document.body.innerHTML = "<p>Error: No se encontró el PDF.</p>";
+        }
+
+
+        // Variables del modal de firma
+        const modalFirma = document.getElementById("modalFirma");
+        const firmarBtn = document.getElementById("firmarBtn");
+        const cerrarModal = document.getElementById("cerrarModal");
+        const guardarFirma = document.getElementById("guardarFirma");
+        const limpiarFirma = document.getElementById("limpiarFirma");
+
+        const canvas = document.getElementById("canvasFirma");
+        const ctx = canvas.getContext("2d");
+        let firmando = false;
+
+        ctx.lineWidth = 6;
+
+        // Mostrar el modal al hacer clic en "Firmar"
+        firmarBtn.addEventListener("click", function () {
+            modalFirma.style.display = "flex";
+        });
+
+        // Cerrar modal
+        cerrarModal.addEventListener("click", function () {
+            modalFirma.style.display = "none";
+        });
+
+        // Función para empezar a dibujar
+        canvas.addEventListener("mousedown", (e) => {
+            firmando = true;
+            ctx.beginPath();
+            ctx.moveTo(e.offsetX, e.offsetY);
+        });
+
+        // Función para dibujar
+        canvas.addEventListener("mousemove", (e) => {
+            if (!firmando) return;
+            ctx.lineTo(e.offsetX, e.offsetY);
+            ctx.stroke();
+        });
+
+        // Finalizar firma
+        canvas.addEventListener("mouseup", () => {
+            firmando = false;
+        });
+
+        // Limpiar firma
+        limpiarFirma.addEventListener("click", () => {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        });
+        const apartadoFirmaY = localStorage.getItem("apartadoFirmaY");
+
+
+        guardarFirma.addEventListener("click", async () => {
+    const firmaImagen = canvas.toDataURL("image/png");  // Convertimos la firma en imagen PNG
+    console.log("Firma guardada:", firmaImagen);
+    alert("Firma guardada correctamente.");
+    modalFirma.style.display = "none";
+
+    // Obtener el nombre del archivo PDF desde la URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const pdfNombre = urlParams.get("pdf");  // Obtener el nombre del archivo PDF
+
+    // Verificar si se ha obtenido correctamente el nombre del archivo
+    if (!pdfNombre) {
+        alert("No se encontró el nombre del archivo PDF.");
+        return;
+    }
+
+    // Añadir "_firmado" al nombre del archivo
+    const nombreArchivoFirmado = pdfNombre.replace('.pdf', '_firmado.pdf');
+
+    // Coordenadas para la firma
+    const firmaX = 90;
+    const firmaY = 60;
+
+    // Obtener la fecha y hora actual
+    const fechaHoraActual = new Date().toLocaleString(); // Fecha y hora en formato local
+    const { PDFDocument, rgb } = PDFLib;
+
+    try {
+        // Cargar el PDF original
+        const existingPdfBytes = await fetch(pdfURL).then(res => res.arrayBuffer());
+
+        // Crear el documento PDF con pdf-lib
+        const pdfDoc = await PDFDocument.load(existingPdfBytes);
+
+        // Obtener las páginas del PDF
+        const pages = pdfDoc.getPages();
+
+        // Obtener la fuente estándar (Helvetica) para la fecha y hora
+        const helveticaFont = await pdfDoc.embedFont(PDFLib.StandardFonts.Helvetica);
+
+        // Definir las variables para las coordenadas X e Y de la fecha y hora
+        let fechaHoraX = pages[0].getWidth() - 15 - (fechaHoraActual.length * 6); // Alineación derecha
+        let fechaHoraY = 760; // Ajuste vertical, puedes modificar esto según lo necesites
+
+        // Convertir la imagen de la firma en un objeto que pdf-lib puede usar
+        const firmaBytes = await fetch(firmaImagen).then(res => res.arrayBuffer());
+        const firmaImage = await pdfDoc.embedPng(firmaBytes); // Cambié embedJpg a embedPng
+
+        // Asegurarse de que las coordenadas de la firma son válidas
+        if (isNaN(firmaX) || isNaN(firmaY)) {
+            throw new Error('Las coordenadas X e Y no son válidas.');
+        }
+
+        const firmaAncho = 120; // Ancho de la firma
+        const firmaAlto = 70;  // Alto de la firma
+    
+        // Iterar sobre cada página para agregar la fecha y hora (y solo la firma en la primera página)
+        pages.forEach((page, index) => {
+            if (index === 0) {
+                page.drawImage(firmaImage, {
+                    x: firmaX,
+                    y: firmaY,
+                    width: firmaAncho,
+                    height: firmaAlto
+                });
+            } else {
+            // Agregar la fecha y hora alineada a la derecha
+            page.drawText(fechaHoraActual, {
+                x: fechaHoraX ,  // Usar la variable para la posición X
+                y: fechaHoraY,  // Usar la variable para la posición Y
+                size: 10,
+                font: helveticaFont,  // Usar la fuente Helvetica
+                color: rgb(0, 0, 0)
+            });
+
+            // Agregar "Firmado Digitalmente" junto a la fecha y hora
+            const firmadoTexto = 'Firmado Digitalmente';
+            page.drawText(firmadoTexto, {
+                x: fechaHoraX - (firmadoTexto.length * 6) + 20, // A la izquierda de la fecha y hora
+                y: fechaHoraY,  // Usar la variable para la posición Y
+                size: 10,
+                font: helveticaFont,  // Usar la fuente Helvetica
+                color: rgb(0, 0, 0)
+            });
+            
+            page.drawImage(firmaImage, {
+                x: fechaHoraX - (firmadoTexto.length * 6) - 120, // A la izquierda de la fecha y hora
+                y: fechaHoraY - 29,
+                width: firmaAncho,
+                height: firmaAlto
+            });
+        }
+        });
+
+        // Guardar el PDF con la firma añadida y encabezado modificado
+        const pdfBytes = await pdfDoc.save();
+        // Guardar el contrato firmado
+        guardarContratoFirmado(pdfBytes, nombreArchivoFirmado,idContrato);
+
+        // Crear un enlace de descarga para el PDF firmado
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(new Blob([pdfBytes], { type: 'application/pdf' }));
+        a.download = nombreArchivoFirmado;
+        a.click();
+
+        alert("PDF firmado correctamente.");
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        window.location.href = "dashboard.php";
+    } catch (error) {
+        console.error("Error al procesar el PDF:", error);
+        alert("No se pudo procesar el PDF. Error: " + error.message);
+    }
+});
+
+async function guardarContratoFirmado(pdfBytes, nombreArchivoFirmado, idContrato) {
+    // Crear un Blob a partir de pdfBytes para que sea un archivo PDF válido
+    const pdfBlob = new Blob([pdfBytes], { type: 'application/pdf' });
+
+    // Crear FormData y adjuntar el archivo PDF como Blob
+    const formData = new FormData();
+    formData.append("archivo", pdfBlob, nombreArchivoFirmado);
+    
+    // Añadir el ID del contrato
+    formData.append("id_contrato", idContrato);
+
+    try {
+        // Enviar el archivo al servidor
+        const response = await fetch("guardar_contratos_firmados.php", {
+            method: "POST",
+            body: formData
+        });
+        console.log("Status de respuesta:", response.status);
+
+        // Esperar la respuesta del servidor
+        const data = await response.json();
+        console.log("Respuesta del servidor:", data);
+
+        // Comprobar si la respuesta es exitosa
+        if (response.ok) {
+            // Mostrar alerta de éxito
+            mostrarAlerta("success", `Contrato guardado correctamente en: ${data.ruta}`);
+        } else {
+            // Mostrar error si no se guardó correctamente
+            mostrarAlerta("error", `Error al guardar el contrato: ${data.error}`);
+        }
+    } catch (error) {
+        console.error("Error en la solicitud:", error);
+        mostrarAlerta("error", "Error en la conexión con el servidor.");
+    }
+}
+
+
+
+
+    </script>
+</body>
+
+</html>
