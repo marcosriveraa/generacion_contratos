@@ -115,6 +115,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.10.377/pdf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
     <script>
         // Obtener la URL del PDF desde los parámetros
         const urlParams = new URLSearchParams(window.location.search);
@@ -179,160 +180,172 @@
 
 
         guardarFirma.addEventListener("click", async () => {
-    const firmaImagen = canvas.toDataURL("image/png");  // Convertimos la firma en imagen PNG
-    console.log("Firma guardada:", firmaImagen);
-    alert("Firma guardada correctamente.");
-    modalFirma.style.display = "none";
+            const firmaImagen = canvas.toDataURL("image/png");  // Convertimos la firma en imagen PNG
+            console.log("Firma guardada:", firmaImagen);
+            alert("Firma guardada correctamente.");
+            modalFirma.style.display = "none";
 
-    // Obtener el nombre del archivo PDF desde la URL
-    const urlParams = new URLSearchParams(window.location.search);
-    const pdfNombre = urlParams.get("pdf");  // Obtener el nombre del archivo PDF
+            // Obtener el nombre del archivo PDF desde la URL
+            const urlParams = new URLSearchParams(window.location.search);
+            const pdfNombre = urlParams.get("pdf");  // Obtener el nombre del archivo PDF
 
-    // Verificar si se ha obtenido correctamente el nombre del archivo
-    if (!pdfNombre) {
-        alert("No se encontró el nombre del archivo PDF.");
-        return;
-    }
+            // Verificar si se ha obtenido correctamente el nombre del archivo
+            if (!pdfNombre) {
+                alert("No se encontró el nombre del archivo PDF.");
+                return;
+            }
+            const fechaHoraActual = new Date().toLocaleString(); // Fecha y hora en formato local
+            // Añadir "_firmado" al nombre del archivo
+            const nombreArchivoFirmado = pdfNombre.replace('pendientes_firma', '');
+            const datosQR = `Archivo: ${nombreArchivoFirmado}\n Fecha y Hora: ${fechaHoraActual}`;
+            const qrCanvas = document.createElement("canvas");
+            await QRCode.toCanvas(qrCanvas, datosQR, { width: 100, height: 100 }); // Usamos QRCode.toCanvas correctamente
+            const qrImageUrl = qrCanvas.toDataURL("image/png");
+            const qrBytes = await fetch(qrImageUrl).then(res => res.arrayBuffer())
 
-    // Añadir "_firmado" al nombre del archivo
-    const nombreArchivoFirmado = pdfNombre.replace('.pdf', '_firmado.pdf');
+            // Coordenadas para la firma
+            const firmaX = 190;
+            const firmaY = 60;
 
-    // Coordenadas para la firma
-    const firmaX = 90;
-    const firmaY = 60;
+            const { PDFDocument, rgb } = PDFLib;
 
-    // Obtener la fecha y hora actual
-    const fechaHoraActual = new Date().toLocaleString(); // Fecha y hora en formato local
-    const { PDFDocument, rgb } = PDFLib;
+            try {
+                // Cargar el PDF original
+                const existingPdfBytes = await fetch(pdfURL).then(res => res.arrayBuffer());
 
-    try {
-        // Cargar el PDF original
-        const existingPdfBytes = await fetch(pdfURL).then(res => res.arrayBuffer());
+                // Crear el documento PDF con pdf-lib
+                const pdfDoc = await PDFDocument.load(existingPdfBytes);
+                const qrImage = await pdfDoc.embedPng(qrBytes);
+                // Obtener las páginas del PDF
+                const pages = pdfDoc.getPages();
+                const qrX = pages[0].getWidth() - 110; // Alineado a la derecha (restando el ancho del QR y dejando margen)
+            const qrY = 10; // Posición en el margen inferior
+                // Obtener la fuente estándar (Helvetica) para la fecha y hora
+                const helveticaFont = await pdfDoc.embedFont(PDFLib.StandardFonts.Helvetica);
 
-        // Crear el documento PDF con pdf-lib
-        const pdfDoc = await PDFDocument.load(existingPdfBytes);
+                // Definir las variables para las coordenadas X e Y de la fecha y hora
+                let fechaHoraX = pages[0].getWidth() - 15 - (fechaHoraActual.length * 6); // Alineación derecha
+                let fechaHoraY = 760; // Ajuste vertical, puedes modificar esto según lo necesites
 
-        // Obtener las páginas del PDF
-        const pages = pdfDoc.getPages();
+                // Convertir la imagen de la firma en un objeto que pdf-lib puede usar
+                const firmaBytes = await fetch(firmaImagen).then(res => res.arrayBuffer());
+                const firmaImage = await pdfDoc.embedPng(firmaBytes); // Cambié embedJpg a embedPng
 
-        // Obtener la fuente estándar (Helvetica) para la fecha y hora
-        const helveticaFont = await pdfDoc.embedFont(PDFLib.StandardFonts.Helvetica);
+                // Asegurarse de que las coordenadas de la firma son válidas
+                if (isNaN(firmaX) || isNaN(firmaY)) {
+                    throw new Error('Las coordenadas X e Y no son válidas.');
+                }
 
-        // Definir las variables para las coordenadas X e Y de la fecha y hora
-        let fechaHoraX = pages[0].getWidth() - 15 - (fechaHoraActual.length * 6); // Alineación derecha
-        let fechaHoraY = 760; // Ajuste vertical, puedes modificar esto según lo necesites
+                const firmaAncho = 120; // Ancho de la firma
+                const firmaAlto = 70;  // Alto de la firma
 
-        // Convertir la imagen de la firma en un objeto que pdf-lib puede usar
-        const firmaBytes = await fetch(firmaImagen).then(res => res.arrayBuffer());
-        const firmaImage = await pdfDoc.embedPng(firmaBytes); // Cambié embedJpg a embedPng
+                // Iterar sobre cada página para agregar la fecha y hora (y solo la firma en la primera página)
+                pages.forEach((page, index) => {
+                    if (index === 0) {
+                        page.drawImage(firmaImage, {
+                            x: firmaX,
+                            y: firmaY,
+                            width: firmaAncho,
+                            height: firmaAlto
+                        });
+                    } else {
+                        // Agregar la fecha y hora alineada a la derecha
+                        page.drawText(fechaHoraActual, {
+                            x: fechaHoraX,  // Usar la variable para la posición X
+                            y: fechaHoraY,  // Usar la variable para la posición Y
+                            size: 10,
+                            font: helveticaFont,  // Usar la fuente Helvetica
+                            color: rgb(0, 0, 0)
+                        });
 
-        // Asegurarse de que las coordenadas de la firma son válidas
-        if (isNaN(firmaX) || isNaN(firmaY)) {
-            throw new Error('Las coordenadas X e Y no son válidas.');
-        }
+                        page.drawImage(qrImage, {
+                            x: qrX,
+                            y: qrY,
+                            width: 50,
+                            height: 50,
+                        })
 
-        const firmaAncho = 120; // Ancho de la firma
-        const firmaAlto = 70;  // Alto de la firma
-    
-        // Iterar sobre cada página para agregar la fecha y hora (y solo la firma en la primera página)
-        pages.forEach((page, index) => {
-            if (index === 0) {
-                page.drawImage(firmaImage, {
-                    x: firmaX,
-                    y: firmaY,
-                    width: firmaAncho,
-                    height: firmaAlto
+                        // Agregar "Firmado Digitalmente" junto a la fecha y hora
+                        const firmadoTexto = 'Firmado Digitalmente';
+                        page.drawText(firmadoTexto, {
+                            x: fechaHoraX - (firmadoTexto.length * 6) + 20, // A la izquierda de la fecha y hora
+                            y: fechaHoraY,  // Usar la variable para la posición Y
+                            size: 10,
+                            font: helveticaFont,  // Usar la fuente Helvetica
+                            color: rgb(0, 0, 0)
+                        });
+
+                        page.drawImage(firmaImage, {
+                            x: fechaHoraX - (firmadoTexto.length * 6) - 120, // A la izquierda de la fecha y hora
+                            y: fechaHoraY - 29,
+                            width: firmaAncho,
+                            height: firmaAlto
+                        });
+                    }
                 });
-            } else {
-            // Agregar la fecha y hora alineada a la derecha
-            page.drawText(fechaHoraActual, {
-                x: fechaHoraX ,  // Usar la variable para la posición X
-                y: fechaHoraY,  // Usar la variable para la posición Y
-                size: 10,
-                font: helveticaFont,  // Usar la fuente Helvetica
-                color: rgb(0, 0, 0)
-            });
+                console.log(nombreArchivoFirmado)
+                // Guardar el PDF con la firma añadida y encabezado modificado
+                const pdfBytes = await pdfDoc.save();
+                // Guardar el contrato firmado
+                guardarContratoFirmado(pdfBytes, nombreArchivoFirmado, idContrato);
 
-            // Agregar "Firmado Digitalmente" junto a la fecha y hora
-            const firmadoTexto = 'Firmado Digitalmente';
-            page.drawText(firmadoTexto, {
-                x: fechaHoraX - (firmadoTexto.length * 6) + 20, // A la izquierda de la fecha y hora
-                y: fechaHoraY,  // Usar la variable para la posición Y
-                size: 10,
-                font: helveticaFont,  // Usar la fuente Helvetica
-                color: rgb(0, 0, 0)
-            });
-            
-            page.drawImage(firmaImage, {
-                x: fechaHoraX - (firmadoTexto.length * 6) - 120, // A la izquierda de la fecha y hora
-                y: fechaHoraY - 29,
-                width: firmaAncho,
-                height: firmaAlto
-            });
-        }
+                // Crear un enlace de descarga para el PDF firmado
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(new Blob([pdfBytes], { type: 'application/pdf' }));
+                a.download = nombreArchivoFirmado;
+                a.click();
+
+                alert("PDF firmado correctamente.");
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                window.location.href = "dashboard.php";
+            } catch (error) {
+                console.error("Error al procesar el PDF:", error);
+                alert("No se pudo procesar el PDF. Error: " + error.message);
+            }
         });
 
-        // Guardar el PDF con la firma añadida y encabezado modificado
-        const pdfBytes = await pdfDoc.save();
-        // Guardar el contrato firmado
-        guardarContratoFirmado(pdfBytes, nombreArchivoFirmado,idContrato);
+        async function guardarContratoFirmado(pdfBytes, nombreArchivoFirmado, idContrato) {
+            // Crear un Blob a partir de pdfBytes para que sea un archivo PDF válido
+            const pdfBlob = new Blob([pdfBytes], { type: 'application/pdf' });
 
-        // Crear un enlace de descarga para el PDF firmado
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(new Blob([pdfBytes], { type: 'application/pdf' }));
-        a.download = nombreArchivoFirmado;
-        a.click();
+            // Crear FormData y adjuntar el archivo PDF como Blob
+            const formData = new FormData();
+            formData.append("archivo", pdfBlob, nombreArchivoFirmado);
 
-        alert("PDF firmado correctamente.");
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        window.location.href = "dashboard.php";
-    } catch (error) {
-        console.error("Error al procesar el PDF:", error);
-        alert("No se pudo procesar el PDF. Error: " + error.message);
-    }
-});
+            // Añadir el ID del contrato
+            formData.append("id_contrato", idContrato);
 
-async function guardarContratoFirmado(pdfBytes, nombreArchivoFirmado, idContrato) {
-    // Crear un Blob a partir de pdfBytes para que sea un archivo PDF válido
-    const pdfBlob = new Blob([pdfBytes], { type: 'application/pdf' });
+            try {
+                // Enviar el archivo al servidor
+                const response = await fetch("guardar_contratos_firmados.php", {
+                    method: "POST",
+                    body: formData
+                });
+                console.log("Status de respuesta:", response.status);
 
-    // Crear FormData y adjuntar el archivo PDF como Blob
-    const formData = new FormData();
-    formData.append("archivo", pdfBlob, nombreArchivoFirmado);
-    
-    // Añadir el ID del contrato
-    formData.append("id_contrato", idContrato);
+                // Esperar la respuesta del servidor
+                const data = await response.json();
+                console.log("Respuesta del servidor:", data);
 
-    try {
-        // Enviar el archivo al servidor
-        const response = await fetch("guardar_contratos_firmados.php", {
-            method: "POST",
-            body: formData
-        });
-        console.log("Status de respuesta:", response.status);
-
-        // Esperar la respuesta del servidor
-        const data = await response.json();
-        console.log("Respuesta del servidor:", data);
-
-        // Comprobar si la respuesta es exitosa
-        if (response.ok) {
-            // Mostrar alerta de éxito
-            mostrarAlerta("success", `Contrato guardado correctamente en: ${data.ruta}`);
-        } else {
-            // Mostrar error si no se guardó correctamente
-            mostrarAlerta("error", `Error al guardar el contrato: ${data.error}`);
+                // Comprobar si la respuesta es exitosa
+                if (response.ok) {
+                    // Mostrar alerta de éxito
+                    mostrarAlerta("success", `Contrato guardado correctamente en: ${data.ruta}`);
+                } else {
+                    // Mostrar error si no se guardó correctamente
+                    mostrarAlerta("error", `Error al guardar el contrato: ${data.error}`);
+                }
+            } catch (error) {
+                console.error("Error en la solicitud:", error);
+                mostrarAlerta("error", "Error en la conexión con el servidor.");
+            }
         }
-    } catch (error) {
-        console.error("Error en la solicitud:", error);
-        mostrarAlerta("error", "Error en la conexión con el servidor.");
-    }
-}
 
 
 
 
     </script>
+
 </body>
 
 </html>

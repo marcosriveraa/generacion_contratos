@@ -13,7 +13,8 @@ RUN chmod +x /init.sh
 COPY html /var/www/html
 
 # Otorgar permisos correctos
-RUN chown -R www-data:www-data /var/www/html
+RUN chown -R www-data:www-data /var/www/html && chmod -R 755 /var/www/html
+
 
 # Exponer el puerto 80 para el servidor web
 EXPOSE 80

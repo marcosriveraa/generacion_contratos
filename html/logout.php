@@ -8,6 +8,6 @@ session_unset();
 session_destroy();
 
 // Redirigir al usuario a la página de login
-header("Location: login_dashboard.html");
+header("Location: login_dashboard.php");
 exit();
 ?>
