@@ -219,7 +219,7 @@
                 // Obtener las páginas del PDF
                 const pages = pdfDoc.getPages();
                 const qrX = pages[0].getWidth() - 110; // Alineado a la derecha (restando el ancho del QR y dejando margen)
-            const qrY = 10; // Posición en el margen inferior
+                const qrY = 10; // Posición en el margen inferior
                 // Obtener la fuente estándar (Helvetica) para la fecha y hora
                 const helveticaFont = await pdfDoc.embedFont(PDFLib.StandardFonts.Helvetica);
 
@@ -283,7 +283,8 @@
                         });
                     }
                 });
-                console.log(nombreArchivoFirmado)
+                console.log(datosQR);
+                console.log(nombreArchivoFirmado);
                 // Guardar el PDF con la firma añadida y encabezado modificado
                 const pdfBytes = await pdfDoc.save();
                 // Guardar el contrato firmado
